@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Clicker Game</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 1rem;
+      background-color: var(--bg);
+      color: var(--fg);
+    }
+    .dark {
+      --bg: #121212;
+      --fg: #f0f0f0;
+    }
+    .light {
+      --bg: #ffffff;
+      --fg: #000000;
+    }
+    .button {
+      padding: 0.5rem 1rem;
+      margin: 0.5rem 0;
+      cursor: pointer;
+      border: none;
+      border-radius: 4px;
+      background-color: #4CAF50;
+      color: white;
+    }
+    .upgrade {
+      margin: 0.5rem 0;
+    }
+    .toggle-dark {
+      margin-top: 1rem;
+    }
+    .achievements {
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+    function ClickerGame() {
+      const defaultState = {
+        points: 0,
+        clickPower: 1,
+        autoClickers: 0,
+        autoClickPower: 1,
+        prestige: 0,
+        darkMode: false,
+        upgrades: [
+          { name: "+1 click", cost: 10, increment: 1, purchased: 0 },
+          { name: "+5 click", cost: 50, increment: 5, purchased: 0 },
+          { name: "+25 click", cost: 200, increment: 25, purchased: 0 }
+        ],
+        achievements: [
+          { name: 'Click Newbie', threshold: 50, unlocked: false },
+          { name: 'Click Master', threshold: 500, unlocked: false },
+          { name: 'Click Legend', threshold: 5000, unlocked: false }
+        ]
+      };
+      // Load from localStorage or default
+      const [state, setState] = useState(() => {
+        try {
+          const saved = localStorage.getItem("clickerGame");
+          return saved ? JSON.parse(saved) : defaultState;
+        } catch {
+          return defaultState;
+        }
+      });
+      // Save to localStorage
+      useEffect(() => {
+        localStorage.setItem("clickerGame", JSON.stringify(state));
+      }, [state]);
+      // Auto-clicker
+      useEffect(() => {
+        const interval = setInterval(() => {
+          if (state.autoClickers > 0) {
+            setState(s => ({ ...s, points: s.points + s.autoClickers * s.autoClickPower }));
+          }
+        }, 1000);
+        return () => clearInterval(interval);
+      }, [state.autoClickers, state.autoClickPower]);
+      // Achievements check
+      useEffect(() => {
+        setState(s => {
+          let updated = false;
+          const newAch = s.achievements.map(a => {
+            if (!a.unlocked && s.points >= a.threshold) {
+              updated = true;
+              return { ...a, unlocked: true };
+            }
+            return a;
+          });
+          return updated ? { ...s, achievements: newAch } : s;
+        });
+      }, [state.points]);
+      const handleClick = () => {
+        setState(s => ({ ...s, points: s.points + s.clickPower }));
+      };
+      const buyUpgrade = (idx) => {
+        setState(s => {
+          const upg = s.upgrades[idx];
+          if (s.points >= upg.cost) {
+            const newUpgrades = s.upgrades.map((u,i) => i === idx ? { ...u, purchased: u.purchased + 1, cost: Math.round(u.cost * 1.5) } : u);
+            return { ...s, points: s.points - upg.cost, clickPower: s.clickPower + upg.increment, upgrades: newUpgrades };
+          }
+          return s;
+        });
+      };
+      const buyAutoClicker = () => {
+        const cost = Math.round(100 * Math.pow(1.5, state.autoClickers));
+        if (state.points >= cost) {
+          setState(s => ({ ...s, points: s.points - cost, autoClickers: s.autoClickers + 1 }));
+        }
+      };
+      const prestige = () => {
+        if (state.points >= 10000) {
+          // reset but reward with extra powers
+          setState(s => {
+            return {
+              ...defaultState,
+              prestige: s.prestige + 1,
+              clickPower: s.clickPower + 1,
+              autoClickPower: s.autoClickPower + 1,
+              darkMode: s.darkMode
+            };
+          });
+        }
+      };
+      const toggleDark = () => {
+        setState(s => ({ ...s, darkMode: !s.darkMode }));
+      };
+      return (
+        <div className={state.darkMode ? "dark" : "light"}>
+          <h1>Clicker Game</h1>
+          <p><strong>Prestige:</strong> {state.prestige}</p>
+          <p><strong>Points:</strong> {Math.floor(state.points)}</p>
+          <p><strong>Click Power:</strong> {state.clickPower}</p>
+          <p><strong>Auto Clickers:</strong> {state.autoClickers}</p>
+          <button className="button" onClick={handleClick}>Click me!</button>
+          <h2>Upgrades</h2>
+          {state.upgrades.map((upg, idx) => (
+            <div className="upgrade" key={idx}>
+              <span>{upg.name} (Cost: {upg.cost})</span>
+              <button className="button" onClick={() => buyUpgrade(idx)}>Buy</button>
+            </div>
+          ))}
+          <h2>Auto-Clicker</h2>
+          <button className="button" onClick={buyAutoClicker}>
+            Buy Auto Clicker (Cost: {Math.round(100 * Math.pow(1.5, state.autoClickers))})
+          </button>
+          <h2>Prestige</h2>
+          <button className="button" onClick={prestige}>
+            Prestige (Requires 10000 points)
+          </button>
+          <div className="toggle-dark">
+            <label>
+              <input type="checkbox" checked={state.darkMode} onChange={toggleDark} />
+              Dark Mode
+            </label>
+          </div>
+          <div className="achievements">
+            <h3>Achievements</h3>
+            <ul>
+              {state.achievements.filter(a => a.unlocked).map((a, i) => (
+                <li key={i}>{a.name}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      );
+    }
+    ReactDOM.createRoot(document.getElementById('root')).render(<ClickerGame />);
+  </script>
+</body>
+</html>
